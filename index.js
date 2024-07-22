@@ -85,7 +85,7 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login-user", async (req, res) => {
-	res.send("User logged in");
+	res.send("User logged in successfully");
 });
 
 app.listen(PORT, () => {
