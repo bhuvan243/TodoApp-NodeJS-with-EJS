@@ -1,7 +1,7 @@
-const isEmailValid = (email) => {
+const isEmailValidator = ({ str }) => {
 	const isEmail =
 		/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|.(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/i.test(
-			email,
+			str,
 		);
 	return isEmail;
 };
@@ -18,10 +18,11 @@ const userDataValidation = ({ name, email, username, password }) => {
 
 		if (username.length < 3 || username.length > 50)
 			reject("username length should be 3-50 chars");
-		if (!isEmailValid(email)) reject("Email format is incorrect");
+		if (!isEmailValidator({ str: email }))
+			reject("Email format is incorrect");
 
 		resolve();
 	});
 };
 
-module.exports = { userDataValidation };
+module.exports = { userDataValidation, isEmailValidator };
