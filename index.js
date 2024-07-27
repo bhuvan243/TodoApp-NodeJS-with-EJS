@@ -4,11 +4,14 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const mongodbSession = require("connect-mongodb-session")(session);
+// const {ObjectId} = require("mongodb"); // this is used to create id for the sessions as same as the mongodb _id
 
 // file-imports
 const { userDataValidation, isEmailValidator } = require("./utils/authUtil");
 const userModel = require("./models/userModel");
 const isAuth = require("./middleware/isAuthMiddleware");
+const todoModel = require("./models/todoModel");
+
 const store = new mongodbSession({
 	uri: process.env.MONGO_URI,
 	collection: "sessions",
@@ -183,6 +186,197 @@ app.post("/logout", (req, res) => {
 		//successfully logout
 		return res.redirect("/login");
 	});
+});
+
+// create new todo
+app.post("/create-item", isAuth, async (req, res) => {
+	console.log(req.body);
+
+	const todoText = req.body.todo;
+	const username = req.session.user.username;
+
+	console.log(todoText, username);
+	// data validation
+	if (!todoText) {
+		return res.send({
+			status: 400,
+			message: "Missing todo text",
+		});
+	}
+
+	if (typeof todoText !== "string") {
+		return res.send({
+			status: 400,
+			message: "Todo is not a text",
+		});
+	}
+
+	//create ann object
+	//obj.save()
+
+	const todoObj = todoModel({
+		//schema : value
+		todo: todoText,
+		username: username,
+	});
+
+	try {
+		const todoDb = await todoObj.save();
+
+		return res.send({
+			status: 201,
+			message: "Todo created successfully",
+			data: todoDb,
+		});
+	} catch (error) {
+		return res.send({
+			status: 500,
+			messsage: "Internal server error",
+			error: error,
+		});
+	}
+});
+
+// read data from database
+app.get("/read-item", async (req, res) => {
+	console.log(req.body);
+
+	try {
+		const todos = await todoModel.find({
+			username: req.session.user.username,
+		});
+
+		console.log(todos);
+		if (todos.length === 0) {
+			return res.send({
+				status: 404,
+				message: "No todos found for this user",
+			});
+		}
+
+		return res.send({
+			status: 200,
+			message: "Todos fetched successfully",
+			data: todos,
+		});
+	} catch (error) {
+		return res.send({
+			status: 500,
+			messsage: "Internal server error",
+			error: error,
+		});
+	}
+});
+
+// edit and update a todo
+app.post("/edit-item", async (req, res) => {
+	console.log(req.body);
+
+	const { todoId, updatedTodoText } = req.body;
+
+	if (!todoId || !updatedTodoText) {
+		return res.send({
+			status: 400,
+			message: "Missing todo id or updated todo text",
+		});
+	}
+
+	if (typeof updatedTodoText !== "string") {
+		return res.send({
+			status: 400,
+			message: "Updated todo is not a text",
+		});
+	}
+
+	try {
+		// find the todo from db
+		const updatedTodo = await todoModel.findByIdAndUpdate(
+			todoId,
+			{ todo: updatedTodoText },
+			{ new: true }, // [options.new=false] «Boolean» if true, return the modified document rather than the original
+		);
+
+		if (!updatedTodo) {
+			return res.send({
+				status: 404,
+				message: "Todo not found",
+			});
+		}
+
+		// ownership check whether the user is same
+		if (updatedTodo.username !== req.session.user.username) {
+			return res.send({
+				status: 403,
+				message: "You are not authorized to edit this todo",
+			});
+		}
+
+		return res.send({
+			status: 200,
+			message: "Todo updated successfully",
+			data: updatedTodo,
+		});
+	} catch (error) {
+		return res.send({
+			status: 500,
+			message: "Internal server error",
+			error: error,
+		});
+	}
+});
+
+// delete a todo
+app.post("/delete-item", async (req, res) => {
+	console.log(req.body);
+
+	const { todoId } = req.body;
+
+	if (!todoId) {
+		return res.send({
+			status: 400,
+			message: "Missing todo id",
+		});
+	}
+
+	if (typeof todoId !== "string") {
+		return res.send({
+			status: 400,
+			message: "Todo Id should be a text",
+		});
+	}
+
+	try {
+		// find the todo from db
+		const deletedTodo = await todoModel.findByIdAndDelete(todoId);
+		console.log("deletedTodo", deletedTodo);
+
+		if (!deletedTodo) {
+			return res.send({
+				status: 404,
+				message: "Todo not found",
+			});
+		}
+
+		// ownership check whether the user is same
+		if (deletedTodo.username !== req.session.user.username) {
+			return res.send({
+				status: 403,
+				message: "You are not authorized to delete this todo",
+			});
+		}
+
+		return res.send({
+			status: 200,
+			message: "Todo deleted successfully",
+			data: deletedTodo,
+		});
+	} catch (error) {
+		return res.send({
+			status: 500,
+			message: "Internal server error",
+			error: error,
+		});
+	}
 });
 
 app.listen(PORT, () => {
