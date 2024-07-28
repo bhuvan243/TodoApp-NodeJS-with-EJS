@@ -33,6 +33,7 @@ app.use(
 		store: store,
 	}),
 );
+app.use(express.static("public"));
 // db connection
 mongoose
 	.connect(process.env.MONGO_URI)
@@ -238,15 +239,22 @@ app.post("/create-item", isAuth, async (req, res) => {
 });
 
 // read data from database
-app.get("/read-item", async (req, res) => {
-	console.log(req.body);
+app.get("/read-item", isAuth, async (req, res) => {
+	const username = req.session.user.username;
+	const SKIP = Number(req.query.skip) || 0;
+	const LIMIT = 2;
 
 	try {
-		const todos = await todoModel.find({
-			username: req.session.user.username,
-		});
+		// const todos = await todoModel.find({
+		// 	username: req.session.user.username,
+		// });
 
-		console.log(todos);
+		const todos = await todoModel.aggregate([
+			{ $match: { username } },
+			{ $skip: SKIP },
+			{ $limit: LIMIT },
+		]);
+
 		if (todos.length === 0) {
 			return res.send({
 				status: 404,
