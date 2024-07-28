@@ -38,7 +38,7 @@ app.use(express.static("public"));
 mongoose
 	.connect(process.env.MONGO_URI)
 	.then(() => console.log("MongoDB Connected..."))
-	.catch((err) => console.error("Connection error:", err));
+	.catch((err) => console.log("Connection error:", err));
 
 // apis
 app.get("/", (req, res) => {
@@ -51,7 +51,6 @@ app.get("/register", (req, res) => {
 });
 
 app.post("/register-user", async (req, res) => {
-	console.log(req.body);
 	const { email, password, username, name } = req.body;
 
 	try {
@@ -95,8 +94,6 @@ app.post("/register-user", async (req, res) => {
 		parseInt(process.env.BCRYPT_SALT),
 	);
 
-	console.log(hashedPassword);
-
 	const userObj = new userModel({
 		name: req.body.name,
 		email: req.body.email,
@@ -123,7 +120,6 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login-user", async (req, res) => {
-	// console.log(req.body);
 	const { loginId, password } = req.body;
 
 	if (!loginId || !password) {
@@ -179,8 +175,6 @@ app.get("/dashboard", isAuth, (req, res) => {
 });
 
 app.post("/logout", (req, res) => {
-	console.log("logout");
-
 	req.session.destroy((err) => {
 		if (err) return res.status(500).json(err);
 
@@ -191,12 +185,9 @@ app.post("/logout", (req, res) => {
 
 // create new todo
 app.post("/create-item", isAuth, async (req, res) => {
-	console.log(req.body);
-
 	const todoText = req.body.todo;
 	const username = req.session.user.username;
 
-	console.log(todoText, username);
 	// data validation
 	if (!todoText) {
 		return res.send({
@@ -278,8 +269,6 @@ app.get("/read-item", isAuth, async (req, res) => {
 
 // edit and update a todo
 app.post("/edit-item", async (req, res) => {
-	console.log(req.body);
-
 	const { todoId, updatedTodoText } = req.body;
 
 	if (!todoId || !updatedTodoText) {
@@ -335,8 +324,6 @@ app.post("/edit-item", async (req, res) => {
 
 // delete a todo
 app.post("/delete-item", async (req, res) => {
-	console.log(req.body);
-
 	const { todoId } = req.body;
 
 	if (!todoId) {
@@ -356,7 +343,6 @@ app.post("/delete-item", async (req, res) => {
 	try {
 		// find the todo from db
 		const deletedTodo = await todoModel.findByIdAndDelete(todoId);
-		console.log("deletedTodo", deletedTodo);
 
 		if (!deletedTodo) {
 			return res.send({
@@ -388,6 +374,6 @@ app.post("/delete-item", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-	console.log("Server is running at: ");
+	console.log("Server is running at: " + process.env.PORT);
 	console.log(`http://localhost:${PORT}`);
 });

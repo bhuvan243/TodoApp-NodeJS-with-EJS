@@ -27,7 +27,6 @@ function genrateTodos() {
 					.join(""),
 			);
 			skip += todos.length;
-			console.log(todos);
 		})
 		.catch((err) => console.log(err));
 }
@@ -57,7 +56,6 @@ document.addEventListener("click", function (event) {
 		axios
 			.post("/delete-item", { todoId })
 			.then((res) => {
-				console.log(res);
 				if (res.data.status !== 200) {
 					alert(res.data.message);
 					return;
@@ -75,7 +73,6 @@ document.addEventListener("click", function (event) {
 		axios
 			.post("/create-item", { todo })
 			.then((res) => {
-				console.log(res);
 				if (res.data.status !== 201) {
 					alert(res.data.message);
 					return;
