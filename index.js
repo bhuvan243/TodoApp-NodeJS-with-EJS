@@ -4,130 +4,137 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const mongodbSession = require("connect-mongodb-session")(session);
-// const {ObjectId} = require("mongodb"); // this is used to create id for the sessions as same as the mongodb _id
+const jwt = require("jsonwebtoken");
+const { ObjectId } = require("mongodb");
 
-// file-imports
-const { userDataValidation, isEmailValidator } = require("./utils/authUtil");
+//file-import
+const {
+	userDataValidation,
+	isEmailValidator,
+	genrateToken,
+	sendVerificationMail,
+} = require("./utils/authUtil");
 const userModel = require("./models/userModel");
 const isAuth = require("./middleware/isAuthMiddleware");
 const todoModel = require("./models/todoModel");
 
+//contants
+const app = express();
+const PORT = process.env.PORT || 8000;
 const store = new mongodbSession({
 	uri: process.env.MONGO_URI,
 	collection: "sessions",
 });
 
-// constants
-const app = express();
-const PORT = process.env.PORT || 8000;
-
-// middleware
-app.set("view engine", "ejs"); // setting the view engine of express ejs
-app.use(express.urlencoded({ extended: true })); // this is for data sent from web browsers
-app.use(express.json()); // this is for data sent from postman
+//middlwares
+app.set("view engine", "ejs"); //setting the view engine  of express to ejs
+app.use(express.urlencoded({ extended: true })); //encoded data form
+app.use(express.json()); //json
 app.use(
 	session({
-		secret: process.env.SESSION_SECRET,
+		secret: process.env.SECRET_KEY,
+		store: store,
 		resave: false,
 		saveUninitialized: false,
-		store: store,
 	}),
 );
 app.use(express.static("public"));
-// db connection
+
+//db connection
 mongoose
 	.connect(process.env.MONGO_URI)
-	.then(() => console.log("MongoDB Connected..."))
-	.catch((err) => console.log("Connection error:", err));
+	.then(() => {
+		console.log("MongoDb connected successfully");
+	})
+	.catch((err) => console.log(err));
 
-// apis
+//api
 app.get("/", (req, res) => {
-	res.send("Server is running");
+	return res.send("Server is running");
 });
 
-// register
+//register
 app.get("/register", (req, res) => {
-	res.render("registerPage");
+	return res.render("registerPage");
 });
 
 app.post("/register-user", async (req, res) => {
-	const { email, password, username, name } = req.body;
+	const { name, email, username, password } = req.body;
 
+	//data validation
 	try {
-		await userDataValidation(req.body);
+		await userDataValidation({ name, email, username, password });
 	} catch (error) {
-		res.status(400).json(error);
-		// -------- we can also send the response like this -----------
-		// return res.send({
-		//     status : 400,
-		//     message : "Data invalid",
-		//     error : error
-		// })
+		return res.status(400).json(error);
 	}
 
-	// without creating the userModel instance we can save the data in DB
-	// const userDB = await userModel.create({
-	// 	name: req.body.name,
-	// 	email: req.body.email,
-	// 	username: req.body.username,
-	// 	password: req.body.password,
-	// });
-	// console.log(userDB._id);
-	// res.send("registered successfully");
+	//find the user if exist with email and username
 
-	// check if the user with email/username is already registered
 	const userEmailExist = await userModel.findOne({ email });
 	if (userEmailExist) {
-		return res.send({ status: 409, message: "Email already registered" });
+		return res.send({
+			status: 400,
+			message: "Email already exist",
+		});
 	}
 
 	const userUsernameExist = await userModel.findOne({ username });
 	if (userUsernameExist) {
 		return res.send({
-			status: 409,
-			message: "Username already registered",
+			status: 400,
+			message: "Username already exist",
 		});
 	}
 
 	const hashedPassword = await bcrypt.hash(
-		req.body.password,
-		parseInt(process.env.BCRYPT_SALT),
+		password,
+		parseInt(process.env.SALT),
 	);
 
+	console.log(hashedPassword);
+
+	//store the data in DB
+
 	const userObj = new userModel({
-		name: req.body.name,
-		email: req.body.email,
-		username: req.body.username,
+		name: name,
+		email: email,
+		username: username,
 		password: hashedPassword,
 	});
 
-	// use try catch -> what if db throws error
 	try {
-		await userObj.save();
+		const userDb = await userObj.save();
+
+		//genrate the token
+
+		const token = genrateToken(email);
+
+		//send the mail
+		sendVerificationMail(email, token);
+
 		return res.redirect("/login");
 	} catch (error) {
-		res.send({
+		console.log(error);
+		return res.send({
 			status: 500,
-			message: "Error while registering user",
+			message: "Internal server error",
 			error: error,
 		});
 	}
 });
 
-// login
+//login
 app.get("/login", (req, res) => {
-	res.render("loginPage");
+	return res.render("loginPage");
 });
 
 app.post("/login-user", async (req, res) => {
+	console.log(req.body);
+
 	const { loginId, password } = req.body;
 
-	if (!loginId || !password) {
-		return res.send({
-			status: 400,
-			message: "Missing loginId or password",
-		});
-	}
+	if (!loginId || !password)
+		return res.status(400).json("Missing login credentials");
 
 	try {
 		//find the user with loginId
@@ -143,17 +150,25 @@ app.post("/login-user", async (req, res) => {
 				.status(400)
 				.json("User not found, please register first");
 
+		console.log("here", userDb);
+		//check is email is verified or not
+		if (!userDb.isEmailVerified) {
+			return res
+				.status(400)
+				.json("Please verify your email before login");
+		}
+
 		//compare the password
 
 		const isMatch = await bcrypt.compare(password, userDb.password);
 		if (!isMatch) return res.status(400).json("Password does not matched");
 
-		// session based auth
+		//session base auth
 		req.session.isAuth = true;
 		req.session.user = {
-			userId: userDb.userId,
-			username: userDb.username,
+			userId: userDb._id, //userDb._id.toString(), new ObjectId(userDb._id)
 			email: userDb.email,
+			username: userDb.username,
 		};
 
 		return res.redirect("/dashboard");
@@ -164,31 +179,49 @@ app.post("/login-user", async (req, res) => {
 			error: error,
 		});
 	}
-
-	res.send("User logged in successfully");
 });
 
-// protected apis
-// dashboard api
+app.get("/verifytoken/:token", async (req, res) => {
+	console.log(req.params);
+	const token = req.params.token;
+
+	const userInfo = jwt.verify(token, process.env.SECRET_KEY);
+	console.log(userInfo);
+
+	try {
+		await userModel.findOneAndUpdate(
+			{ email: userInfo },
+			{ isEmailVerified: true },
+		);
+		return res.redirect("/login");
+	} catch (error) {
+		return res.status(500).json(error);
+	}
+});
+
+//protected api
 app.get("/dashboard", isAuth, (req, res) => {
 	return res.render("dashboardPage");
 });
 
-app.post("/logout", (req, res) => {
+app.post("/logout", isAuth, (req, res) => {
+	console.log("logout");
+
 	req.session.destroy((err) => {
 		if (err) return res.status(500).json(err);
-
-		//successfully logout
 		return res.redirect("/login");
 	});
 });
 
-// create new todo
+//todos api's
+
 app.post("/create-item", isAuth, async (req, res) => {
+	console.log(req.body);
+
 	const todoText = req.body.todo;
 	const username = req.session.user.username;
 
-	// data validation
+	//data validation
 	if (!todoText) {
 		return res.send({
 			status: 400,
@@ -229,89 +262,40 @@ app.post("/create-item", isAuth, async (req, res) => {
 	}
 });
 
-// read data from database
+// /read-item?skip=10
 app.get("/read-item", isAuth, async (req, res) => {
-	const username = req.session.user.username;
 	const SKIP = Number(req.query.skip) || 0;
-	const LIMIT = 2;
+	const LIMIT = 5;
+	const username = req.session.user.username;
 
 	try {
-		// const todos = await todoModel.find({
-		// 	username: req.session.user.username,
-		// });
+		// const todoDb = await todoModel.find({ username: username }); //return an array
 
-		const todos = await todoModel.aggregate([
-			{ $match: { username } },
-			{ $skip: SKIP },
-			{ $limit: LIMIT },
+		//mongodb aggregate
+		//pagination, match
+		const todoDb = await todoModel.aggregate([
+			{
+				$match: { username: username },
+			},
+			{
+				$skip: SKIP,
+			},
+			{
+				$limit: LIMIT,
+			},
 		]);
-
-		if (todos.length === 0) {
+		console.log(todoDb);
+		if (todoDb.length === 0) {
 			return res.send({
-				status: 404,
-				message: "No todos found for this user",
+				status: 204,
+				message: "No todos found",
 			});
 		}
 
 		return res.send({
 			status: 200,
-			message: "Todos fetched successfully",
-			data: todos,
-		});
-	} catch (error) {
-		return res.send({
-			status: 500,
-			messsage: "Internal server error",
-			error: error,
-		});
-	}
-});
-
-// edit and update a todo
-app.post("/edit-item", async (req, res) => {
-	const { todoId, updatedTodoText } = req.body;
-
-	if (!todoId || !updatedTodoText) {
-		return res.send({
-			status: 400,
-			message: "Missing todo id or updated todo text",
-		});
-	}
-
-	if (typeof updatedTodoText !== "string") {
-		return res.send({
-			status: 400,
-			message: "Updated todo is not a text",
-		});
-	}
-
-	try {
-		// find the todo from db
-		const updatedTodo = await todoModel.findByIdAndUpdate(
-			todoId,
-			{ todo: updatedTodoText },
-			{ new: true }, // [options.new=false] «Boolean» if true, return the modified document rather than the original
-		);
-
-		if (!updatedTodo) {
-			return res.send({
-				status: 404,
-				message: "Todo not found",
-			});
-		}
-
-		// ownership check whether the user is same
-		if (updatedTodo.username !== req.session.user.username) {
-			return res.send({
-				status: 403,
-				message: "You are not authorized to edit this todo",
-			});
-		}
-
-		return res.send({
-			status: 200,
-			message: "Todo updated successfully",
-			data: updatedTodo,
+			message: "Read success",
+			data: todoDb,
 		});
 	} catch (error) {
 		return res.send({
@@ -322,9 +306,13 @@ app.post("/edit-item", async (req, res) => {
 	}
 });
 
-// delete a todo
-app.post("/delete-item", async (req, res) => {
-	const { todoId } = req.body;
+app.post("/edit-item", isAuth, async (req, res) => {
+	const newData = req.body.newData;
+	const todoId = req.body.todoId;
+
+	const usernameReq = req.session.user.username;
+
+	console.log(newData, todoId);
 
 	if (!todoId) {
 		return res.send({
@@ -333,36 +321,83 @@ app.post("/delete-item", async (req, res) => {
 		});
 	}
 
-	if (typeof todoId !== "string") {
+	if (!newData) {
 		return res.send({
 			status: 400,
-			message: "Todo Id should be a text",
+			message: "Missing todo text",
+		});
+	}
+
+	if (typeof newData !== "string") {
+		return res.send({
+			status: 400,
+			message: "Todo is not a text",
 		});
 	}
 
 	try {
-		// find the todo from db
-		const deletedTodo = await todoModel.findByIdAndDelete(todoId);
+		//find the todo from db
+		const todoDb = await todoModel.findOne({ _id: todoId });
+		console.log(todoDb.username, usernameReq);
 
-		if (!deletedTodo) {
+		//ownership check
+		if (todoDb.username !== usernameReq) {
 			return res.send({
-				status: 404,
-				message: "Todo not found",
+				status: 403, //forbidden
+				message: "Not allowed to edit the todo",
 			});
 		}
 
-		// ownership check whether the user is same
-		if (deletedTodo.username !== req.session.user.username) {
+		const prevDataDb = await todoModel.findOneAndUpdate(
+			{ _id: todoId },
+			{ todo: newData },
+		);
+
+		return res.send({
+			status: 200,
+			message: "Todo updated successfully",
+			data: prevDataDb,
+		});
+	} catch (error) {
+		return res.send({
+			status: 500,
+			message: "Internal server error",
+			error: error,
+		});
+	}
+});
+
+app.post("/delete-item", isAuth, async (req, res) => {
+	const todoId = req.body.todoId;
+
+	const usernameReq = req.session.user.username;
+
+	if (!todoId) {
+		return res.send({
+			status: 400,
+			message: "Missing todo id",
+		});
+	}
+
+	try {
+		//find the todo from db
+		const todoDb = await todoModel.findOne({ _id: todoId });
+		console.log(todoDb.username, usernameReq);
+
+		//ownership check
+		if (todoDb.username !== usernameReq) {
 			return res.send({
-				status: 403,
-				message: "You are not authorized to delete this todo",
+				status: 403, //forbidden
+				message: "Not allowed to delete the todo",
 			});
 		}
+
+		const prevDataDb = await todoModel.findOneAndDelete({ _id: todoId }); //deleteOne()
 
 		return res.send({
 			status: 200,
 			message: "Todo deleted successfully",
-			data: deletedTodo,
+			data: prevDataDb,
 		});
 	} catch (error) {
 		return res.send({
@@ -374,6 +409,6 @@ app.post("/delete-item", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-	console.log("Server is running at: " + process.env.PORT);
+	console.log(`Server is running at:`);
 	console.log(`http://localhost:${PORT}`);
 });

@@ -7,7 +7,7 @@ const todoSchema = new Schema(
 			type: String,
 			required: true,
 			trim: true,
-			minLength: 3,
+			minLength: 5,
 			maxLength: 100,
 		},
 		username: {
@@ -20,4 +20,4 @@ const todoSchema = new Schema(
 	},
 );
 
-module.exports = mongoose.model("Todo", todoSchema);
+module.exports = mongoose.model("todo", todoSchema);

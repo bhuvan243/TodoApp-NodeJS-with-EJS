@@ -20,6 +20,16 @@ const userSchema = new Schema({
 		type: String,
 		required: true,
 	},
+	country: {
+		type: String,
+		default: "India",
+	},
+	isEmailVerified: {
+		type: Boolean,
+		default: false,
+	},
 });
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("user", userSchema);
+
+// Normailzation in dbms 1nf, 2nf, 3nf bcnf

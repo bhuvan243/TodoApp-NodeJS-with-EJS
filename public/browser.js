@@ -3,6 +3,7 @@ window.onload = genrateTodos;
 let skip = 0;
 
 function genrateTodos() {
+	console.log(skip);
 	axios
 		.get(`/read-item?skip=${skip}`)
 		.then((res) => {
@@ -12,7 +13,7 @@ function genrateTodos() {
 			}
 
 			const todos = res.data.data;
-
+			console.log(todos);
 			document.getElementById("item_list").insertAdjacentHTML(
 				"beforeend",
 				todos
@@ -27,6 +28,7 @@ function genrateTodos() {
 					.join(""),
 			);
 			skip += todos.length;
+			console.log(skip);
 		})
 		.catch((err) => console.log(err));
 }
@@ -34,18 +36,21 @@ function genrateTodos() {
 document.addEventListener("click", function (event) {
 	//edit
 	if (event.target.classList.contains("edit-me")) {
-		const updatedTodoText = prompt("Enter new Todo text");
+		const newData = prompt("Enter new Todo text");
 		const todoId = event.target.getAttribute("data-id");
+
 		axios
-			.post("/edit-item", { updatedTodoText, todoId })
+			.post("/edit-item", { newData, todoId })
 			.then((res) => {
 				if (res.data.status !== 200) {
 					alert(res.data.message);
 					return;
 				}
+
+				console.log(event.target);
 				event.target.parentElement.parentElement.querySelector(
 					".item-text",
-				).innerText = updatedTodoText;
+				).innerHTML = newData;
 			})
 			.catch((err) => console.log(err));
 	}
@@ -56,6 +61,7 @@ document.addEventListener("click", function (event) {
 		axios
 			.post("/delete-item", { todoId })
 			.then((res) => {
+				console.log(res);
 				if (res.data.status !== 200) {
 					alert(res.data.message);
 					return;
@@ -73,6 +79,7 @@ document.addEventListener("click", function (event) {
 		axios
 			.post("/create-item", { todo })
 			.then((res) => {
+				console.log(res);
 				if (res.data.status !== 201) {
 					alert(res.data.message);
 					return;
@@ -92,7 +99,7 @@ document.addEventListener("click", function (event) {
 			})
 			.catch((err) => console.log(err));
 	}
-	// show-more todos
+	//showw more
 	else if (event.target.classList.contains("show_more")) {
 		genrateTodos();
 	}
